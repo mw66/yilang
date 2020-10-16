@@ -1,0 +1,15 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/yilang
+yilang.so
+yilang.dylib
+yilang.dll
+yilang.a
+yilang.lib
+yilang-test-*
+*.exe
+*.o
+*.obj
+*.lst

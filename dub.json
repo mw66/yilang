@@ -1,0 +1,13 @@
+{
+	"authors": [
+		"yilabs"
+	],
+	"copyright": "Copyright © 2020, yilabs",
+	"dependencies": {
+		"commandr": "~>0.2.0",
+		"pegged": "~>0.4.4"
+	},
+	"description": "The Yi Programming Language",
+	"license": "Boost",
+	"name": "yc"
+}
