@@ -4,10 +4,10 @@ all: yc
 DUB=dub
 
 yc: source/*.d
-	$(DUB) build
+	$(DUB) -q build
 
 example:
-	./yc -c testdata/visitor.yi
+	./yc -c test/visitor.yi
 
 clean:
 	$(DUB) clean

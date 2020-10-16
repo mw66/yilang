@@ -21,39 +21,124 @@ class Field {
 
 class ClassDeclaration {
   string name;
-  SuperClass[] superClass;
-  Field[] fields;
+  SuperClass[] superClass;  // this won't changed, after parsed
+  Field[string] fields;     // directly from the source code
 
   mixin(GenerateToString);
+
+  bool fieldsFlattened;
+  Field[string] actualFields;  // after semanCheck, and consolidation with superClass' fields, all flattened
+  // TODO: provide shallowClone() for each generated D class
+
+  bool allSuperClassFieldsFlattened() {
+    foreach (s; this.superClass) {
+      if (!s.clazz.fieldsFlattened) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // only check direct superClass
+  void semanCheck() {
+    writeln("semanCheck " ~ this.name);
+    enforce(fieldsFlattened == false);
+
+    enforce(allSuperClassFieldsFlattened());
+    foreach (s; this.superClass) {
+      enforce(s.clazz.fieldsFlattened);
+      auto af = s.clazz.actualFields.dup;
+      foreach (ca; s.classAdapters) {
+        Field newField = ca.process(af[ca.orgName]);
+        af[ca.orgName] = newField;
+      }
+      // same name here is joined
+      foreach (f; af.values()) {
+        actualFields[f.name] = f;
+      }
+    }
+
+    // now add own fields
+    foreach (f; fields.values()) {
+      enforce(f.name !in actualFields, this.name ~ "'s super class has defined " ~ f.toString() ~ " already!");
+      actualFields[f.name] = f;
+    }
+
+    fieldsFlattened = true;
+    enforce(actualFields.length >= fields.length);
+  }
 }
 
 class ClassAdapter {
+  string orgName;
+  abstract Field process(Field old);  // return new
 }
 
 class SuperClass {
   string name;
   ClassAdapter[] classAdapters;
+
+  ClassDeclaration clazz;  // the class object after linked
 }
 
 class Rename : ClassAdapter {
-  string oldName;
   string newName;
   mixin(GenerateToString);
+
+  override Field process(Field old) {  // return new
+    enforce(old.name == orgName);
+    Field newField = new Field();
+    newField.type = old.type;
+    newField.name = newName;
+    return newField;
+  }
 }
 
 
 class System {
-  ClassDeclaration[] classDeclarations;
+  ClassDeclaration[string] classDeclarations;  // dict by class name
 
   // whole system semantic check for all the class, and generate code
   void semanCheck() {
-    // 1) build class inheritance lattice
-    // 2) check each class fields from the top to bottom of the lattice
-    // 3) generate D code: interface, and implementation
-    /* for each Yi class A, will generate:
-       -- an interface A : (multiple inherent other interface) {}
-       -- a class A_ : A (single A) { actual fields }
+    // 1) build class inheritance lattice, this lattice will also be the basis of runtime multiple dispatch
+    foreach (c; classDeclarations.values()) {
+      foreach (s; c.superClass) {
+        enforce(s.name in classDeclarations, c.name ~ "'s superClass " ~ s.name ~ " not found!");
+        s.clazz = classDeclarations[s.name];  // link to super class object
+      }
+    }
 
+    // 2) calc each class fields from the top to bottom of the lattice
+    bool processedOne = false;
+    do {
+      processedOne = false;
+      foreach (c; classDeclarations.values()) {
+        if (c.allSuperClassFieldsFlattened() && !c.fieldsFlattened) {
+          c.semanCheck();
+          processedOne = true;
+        }
+      }
+    } while (processedOne);
+
+    // 3) generate D code: interface, and implementation, and runtime dispatch table
+    /* for each Yi class A, will generate:
+       -- interface A : (multiple inherent other interface) {
+            // no field def, since field not allowed in interface (see test/i.d)
+            // only accessor method proto, e.g:
+            @property ref int field();
+          }
+
+       -- class A_ : A (single A) {
+            // the actual fields
+            private int field_;
+
+            // the accessor method implementation
+            @property ref int field() {
+              return field_;
+            }
+          }
+
+       -- for fields reuse: the ClassAdapter are actually only change the accessor method
        -- for code reuse: use the multi-method, which access the implementation class' field via `ref type field`
        check testdata/ref.d
 
@@ -63,7 +148,7 @@ class System {
   }
 
   void summary() {
-    foreach (c; classDeclarations) {
+    foreach (c; classDeclarations.values()) {
       writeln(c);
     }
   }
@@ -94,7 +179,7 @@ string compile(ProgramArgs pargs, string yiFn) {
       }
       */
       auto r = new Rename();
-      r.oldName = p.children[0].matches[0];
+      r.orgName = p.children[0].matches[0];
       r.newName = p.children[1].matches[0];
       s.classAdapters ~= r;
       return;
@@ -118,7 +203,7 @@ string compile(ProgramArgs pargs, string yiFn) {
       auto f = new Field();
       f.type = p.children[0].matches[0];
       f.name = p.children[1].matches[0];
-      c.fields ~= f;
+      c.fields[f.name] = f;
       return;
     default:
       foreach (i, child; p.children) {
@@ -138,7 +223,8 @@ string compile(ProgramArgs pargs, string yiFn) {
         visitClassDeclaration(child, c);
       }
       writeln(c.name, c.superClass, c.fields);
-      system.classDeclarations ~= c;
+      enforce(c.name !in system.classDeclarations, "duplicate defined class: " ~ c.name);
+      system.classDeclarations[c.name] = c;
       return "c";
     default:
       writeln(p.name);
@@ -154,6 +240,7 @@ string compile(ProgramArgs pargs, string yiFn) {
   string dcode = visit(p);  // pass the tree root
 
   // whole system semantic check for all the class, and generate code
+  system.semanCheck();
   system.summary();
 
   return dcode;

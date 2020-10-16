@@ -10,4 +10,6 @@ class USR: Person {}
 
 class Visitor :
 	UKR(rename addr as ukAddr; rename id as ukId;),
-	USR(rename addr as usAddr; rename id as usId;) {}
+	USR(rename addr as usAddr; rename id as usId;),
+	Person
+{}
