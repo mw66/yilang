@@ -2,6 +2,7 @@ import std.exception;
 import std.file;
 import std.stdio;
 
+import boilerplate;
 import commandr;
 import pegged.grammar;
 
@@ -11,9 +12,17 @@ import yigrammar;
 mixin(grammar(yigrammar.YiGrammar));
 
 
+class Field {
+  string type;
+  string name;
+
+  mixin(GenerateToString);
+}
+
 class ClassDeclaration {
   string name;
   SuperClass[] superClass;
+  Field[] fields;
 }
 
 class ClassAdapter {
@@ -27,14 +36,15 @@ class SuperClass {
 class Rename : ClassAdapter {
   string oldName;
   string newName;
+  mixin(GenerateToString);
 }
 
 
 class System {
-  ClassDeclaration[] classDeclaration;
+  ClassDeclaration[] classDeclarations;
 
   void summary() {
-    foreach (c; classDeclaration) {
+    foreach (c; classDeclarations) {
       writeln(c.name);
     }
   }
@@ -85,6 +95,12 @@ string compile(ProgramArgs pargs, string yiFn) {
       writeln(s.name, s.classAdapters);
       c.superClass ~= s;
       return;
+    case "Yi.Field":
+      auto f = new Field();
+      f.type = p.children[0].matches[0];
+      f.name = p.children[1].matches[0];
+      c.fields ~= f;
+      return;
     default:
       foreach (i, child; p.children) {
         visitClassDeclaration(child, c);
@@ -102,8 +118,8 @@ string compile(ProgramArgs pargs, string yiFn) {
       foreach (child; p.children[1..$]) {
         visitClassDeclaration(child, c);
       }
-      writeln(c.name, c.superClass);
-      system.classDeclaration ~= c;
+      writeln(c.name, c.superClass, c.fields);
+      system.classDeclarations ~= c;
       return "c";
     default:
       writeln(p.name);

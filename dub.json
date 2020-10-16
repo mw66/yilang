@@ -4,6 +4,7 @@
 	],
 	"copyright": "Copyright © 2020, yilabs",
 	"dependencies": {
+		"boilerplate": "~>1.5.15",
 		"commandr": "~>0.2.0",
 		"pegged": "~>0.4.4"
 	},

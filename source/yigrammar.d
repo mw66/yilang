@@ -41,16 +41,16 @@ ClassBody < "{" ClassBodyDeclarations? "}"
 
 ClassBodyDeclarations < ClassBodyDeclaration ClassBodyDeclarations?
 
-ClassBodyDeclaration < Decl
+ClassBodyDeclaration < Field
                      # / DeclDef
                      # / Invariant
                      # / ClassAllocator
                      # / ClassDeallocator
 
-Decl < BasicType Declarators ";"
+Field < BasicType Declarators ";"
      # / BasicType Declarator FunctionBody
      # / AutoDeclaration
-     # / StorageClasses Decl
+     # / StorageClasses Field
 
 BasicType < Identifier
 
