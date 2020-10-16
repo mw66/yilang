@@ -23,6 +23,8 @@ class ClassDeclaration {
   string name;
   SuperClass[] superClass;
   Field[] fields;
+
+  mixin(GenerateToString);
 }
 
 class ClassAdapter {
@@ -43,9 +45,26 @@ class Rename : ClassAdapter {
 class System {
   ClassDeclaration[] classDeclarations;
 
+  // whole system semantic check for all the class, and generate code
+  void semanCheck() {
+    // 1) build class inheritance lattice
+    // 2) check each class fields from the top to bottom of the lattice
+    // 3) generate D code: interface, and implementation
+    /* for each Yi class A, will generate:
+       -- an interface A : (multiple inherent other interface) {}
+       -- a class A_ : A (single A) { actual fields }
+
+       -- for code reuse: use the multi-method, which access the implementation class' field via `ref type field`
+       check testdata/ref.d
+
+       usage:
+       -- A a = new A_();
+     */
+  }
+
   void summary() {
     foreach (c; classDeclarations) {
-      writeln(c.name);
+      writeln(c);
     }
   }
 }
