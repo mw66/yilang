@@ -2,6 +2,7 @@
 class Person {
   string id;
   string addr;
+  string name;
 }
 
 class UKR: Person {}
@@ -12,4 +13,6 @@ class Visitor :
 	UKR(rename addr as ukAddr; rename id as ukId;),
 	USR(rename addr as usAddr; rename id as usId;),
 	Person
-{}
+{
+  string visa;
+}

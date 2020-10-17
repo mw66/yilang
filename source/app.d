@@ -1,5 +1,9 @@
+import std.algorithm;
+import std.array;
 import std.exception;
 import std.file;
+import std.format;
+import std.range;
 import std.stdio;
 
 import boilerplate;
@@ -17,15 +21,48 @@ class Field {
   string name;
 
   mixin(GenerateToString);
+
+  bool newActualFields;  // renamed from superClass, or newly introduced in this class
+
+  Field clone() {
+    Field clone = new Field();
+    clone.type = this.type;
+    clone.name = this.name;
+    clone.newActualFields = false;
+    return clone;
+  }
+  /* return:
+    @property ref int field()"
+   */
+  string toInterfaceCode() {
+    return format("  @property ref %s %s()", type, name);
+  }
+
+  /* return:
+    private int field_;"
+    @property ref int field() {return field_;}
+  */
+  string toClassCode() {
+    return ["  private " ~ type ~" "~ name ~ "_;",
+        toInterfaceCode() ~ format(" {return %s_;}", name)].join("\n");
+  }
+
+  // cmp by name
+  /*
+  override int opCmp(Object o) {
+    return this.name.opCmp(cast(Field).o.name);
+  }
+  */
 }
 
 class ClassDeclaration {
   string name;
-  SuperClass[] superClass;  // this won't changed, after parsed
+  SuperClass[] superClass;  // this won't changed, after parsed; keep the original order in source code
   Field[string] fields;     // directly from the source code
 
   mixin(GenerateToString);
 
+  int latticeOrder;  // in the inheritance lattice
   bool fieldsFlattened;
   Field[string] actualFields;  // after semanCheck, and consolidation with superClass' fields, all flattened
   // TODO: provide shallowClone() for each generated D class
@@ -43,12 +80,16 @@ class ClassDeclaration {
   void semanCheck() {
     writeln("semanCheck " ~ this.name);
     enforce(fieldsFlattened == false);
+    enforce(actualFields.length == 0);
 
     enforce(allSuperClassFieldsFlattened());
     foreach (s; this.superClass) {
       enforce(s.clazz.fieldsFlattened);
-      auto af = s.clazz.actualFields.dup;
-      foreach (ca; s.classAdapters) {
+      typeof(s.clazz.actualFields) af;
+      foreach (k, f; s.clazz.actualFields) {
+        af[k] = f.clone();  // first clone
+      }
+      foreach (ca; s.classAdapters) {  // process in the same original order as in the source code
         Field newField = ca.process(af[ca.orgName]);
         af[ca.orgName] = newField;
       }
@@ -60,12 +101,54 @@ class ClassDeclaration {
 
     // now add own fields
     foreach (f; fields.values()) {
+      f.newActualFields = true;
       enforce(f.name !in actualFields, this.name ~ "'s super class has defined " ~ f.toString() ~ " already!");
       actualFields[f.name] = f;
     }
 
     fieldsFlattened = true;
     enforce(actualFields.length >= fields.length);
+  }
+
+  /* for each Yi class A, will generate:
+     -- interface A : (multiple inherent other interface) {
+          // no field def, since field not allowed in interface (see test/i.d)
+          // only accessor method proto, e.g:
+          @property ref int field();
+        }
+
+     -- class A_ : A (single A) {
+          // the actual fields
+          private int field_;
+
+          // the accessor method implementation
+          @property ref int field() {
+            return field_;
+          }
+        }
+
+     -- for fields reuse: the ClassAdapter are actually only change the accessor method
+     -- for code reuse: use the multi-method, which access the implementation class' field via `ref type field`
+     check testdata/ref.d
+
+     usage:
+     -- A a = new A_();
+   */
+  void generateCode() {
+    auto sortedFields = this.actualFields.values().sort!("a.name < b.name");
+
+    // output only new fields in the interface
+    string interfaceCode = chain(["interface " ~ this.name ~ ": " ~ this.superClass.map!(s => s.name).join(", ") ~ " {"],
+        sortedFields.filter!(f => f.newActualFields).map!(f => f.toInterfaceCode()~";").array,
+        ["}"]).join("\n");
+
+    // output all (old + new) the fields in the class
+    string classCode = chain(["class " ~this.name~ "_ : " ~this.name~ " {"],
+        sortedFields.map!(f => f.toClassCode()).array,
+        ["}"]).join("\n");
+
+    writeln(interfaceCode);
+    writeln(classCode);
   }
 }
 
@@ -76,7 +159,7 @@ class ClassAdapter {
 
 class SuperClass {
   string name;
-  ClassAdapter[] classAdapters;
+  ClassAdapter[] classAdapters;  // keep the original order in source code
 
   ClassDeclaration clazz;  // the class object after linked
 }
@@ -90,6 +173,7 @@ class Rename : ClassAdapter {
     Field newField = new Field();
     newField.type = old.type;
     newField.name = newName;
+    newField.newActualFields = true;
     return newField;
   }
 }
@@ -109,47 +193,31 @@ class System {
     }
 
     // 2) calc each class fields from the top to bottom of the lattice
-    bool processedOne = false;
+    int processedCount = 0, oldProcessedCount = 0;
     do {
-      processedOne = false;
+      oldProcessedCount = processedCount;
       foreach (c; classDeclarations.values()) {
         if (c.allSuperClassFieldsFlattened() && !c.fieldsFlattened) {
           c.semanCheck();
-          processedOne = true;
+          c.latticeOrder = processedCount++;
         }
       }
-    } while (processedOne);
+    } while (oldProcessedCount < processedCount && processedCount < classDeclarations.length);
+    enforce(processedCount == classDeclarations.length);
 
     // 3) generate D code: interface, and implementation, and runtime dispatch table
-    /* for each Yi class A, will generate:
-       -- interface A : (multiple inherent other interface) {
-            // no field def, since field not allowed in interface (see test/i.d)
-            // only accessor method proto, e.g:
-            @property ref int field();
-          }
-
-       -- class A_ : A (single A) {
-            // the actual fields
-            private int field_;
-
-            // the accessor method implementation
-            @property ref int field() {
-              return field_;
-            }
-          }
-
-       -- for fields reuse: the ClassAdapter are actually only change the accessor method
-       -- for code reuse: use the multi-method, which access the implementation class' field via `ref type field`
-       check testdata/ref.d
-
-       usage:
-       -- A a = new A_();
-     */
+    foreach (i; 0..classDeclarations.length) {
+      foreach (c; classDeclarations.values()) {
+        if (c.latticeOrder == i) {
+          c.generateCode();
+	}
+      }
+    }
   }
 
   void summary() {
     foreach (c; classDeclarations.values()) {
-      writeln(c);
+      // writeln(c);
     }
   }
 }
@@ -250,7 +318,7 @@ void main(string[] args) {
   auto pargs = new Program("yc", "0.0.1")
           .summary("Yi compiler")
           .author("<admin@yilabs.com>")
-          .add(new Flag("v", null, "turns on more verbose output")
+          .add(new commandr.Flag("v", null, "turns on more verbose output")
               .name("verbose")
               .repeating)
           .add(new Option("c", "RUNCFG", "").validateEachWith(opt => opt.isFile, "must be a valid file"))
