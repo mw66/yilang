@@ -15,6 +15,8 @@ import yigrammar;
 
 mixin(grammar(yigrammar.YiGrammar));
 
+immutable string DOT_YI = ".yi";
+immutable string DOT_D  = ".d";
 
 class Field {
   string type;
@@ -24,6 +26,7 @@ class Field {
 
   bool newActualFields;  // renamed from superClass, or newly introduced in this class
 
+  // we clone to process this Field in the derived class, hence set clone.newActualFields = false
   Field clone() {
     Field clone = new Field();
     clone.type = this.type;
@@ -31,6 +34,7 @@ class Field {
     clone.newActualFields = false;
     return clone;
   }
+
   /* return:
     @property ref int field()"
    */
@@ -46,13 +50,6 @@ class Field {
     return ["  private " ~ type ~" "~ name ~ "_;",
         toInterfaceCode() ~ format(" {return %s_;}", name)].join("\n");
   }
-
-  // cmp by name
-  /*
-  override int opCmp(Object o) {
-    return this.name.opCmp(cast(Field).o.name);
-  }
-  */
 }
 
 class ClassDeclaration {
@@ -134,11 +131,15 @@ class ClassDeclaration {
      usage:
      -- A a = new A_();
    */
-  void generateCode() {
+  string generateCode() {
     auto sortedFields = this.actualFields.values().sort!("a.name < b.name");
 
     // output only new fields in the interface
-    string interfaceCode = chain(["interface " ~ this.name ~ ": " ~ this.superClass.map!(s => s.name).join(", ") ~ " {"],
+    string superClassCode = "";
+    if (this.superClass.length > 0) {
+      superClassCode = ": " ~ this.superClass.map!(s => s.name).join(", ");
+    }
+    string interfaceCode = chain(["interface " ~ this.name ~ superClassCode ~ " {"],
         sortedFields.filter!(f => f.newActualFields).map!(f => f.toInterfaceCode()~";").array,
         ["}"]).join("\n");
 
@@ -147,8 +148,13 @@ class ClassDeclaration {
         sortedFields.map!(f => f.toClassCode()).array,
         ["}"]).join("\n");
 
-    writeln(interfaceCode);
-    writeln(classCode);
+    // "A newA() {return new A_();}"
+    string newFuncCode = format("%s new%s() {return new %s_();}", this.name, this.name, this.name);
+
+    string result = [interfaceCode, classCode, newFuncCode, ""].join("\n\n");
+    // writeln(result);
+
+    return result;
   }
 }
 
@@ -181,9 +187,10 @@ class Rename : ClassAdapter {
 
 class System {
   ClassDeclaration[string] classDeclarations;  // dict by class name
+  ClassDeclaration[] sortedClassDeclarations;  // by c.latticeOrder
 
   // whole system semantic check for all the class, and generate code
-  void semanCheck() {
+  string semanCheck() {
     // 1) build class inheritance lattice, this lattice will also be the basis of runtime multiple dispatch
     foreach (c; classDeclarations.values()) {
       foreach (s; c.superClass) {
@@ -200,19 +207,17 @@ class System {
         if (c.allSuperClassFieldsFlattened() && !c.fieldsFlattened) {
           c.semanCheck();
           c.latticeOrder = processedCount++;
+	  sortedClassDeclarations ~= c;
         }
       }
     } while (oldProcessedCount < processedCount && processedCount < classDeclarations.length);
-    enforce(processedCount == classDeclarations.length);
+    enforce(classDeclarations.length == processedCount);
+    enforce(classDeclarations.length == sortedClassDeclarations.length);
 
     // 3) generate D code: interface, and implementation, and runtime dispatch table
-    foreach (i; 0..classDeclarations.length) {
-      foreach (c; classDeclarations.values()) {
-        if (c.latticeOrder == i) {
-          c.generateCode();
-	}
-      }
-    }
+    string allCode = sortedClassDeclarations.map!(c => c.generateCode()).join("\n");
+    // writeln(allCode);
+    return allCode;
   }
 
   void summary() {
@@ -282,7 +287,7 @@ string compile(ProgramArgs pargs, string yiFn) {
   }
 
   // output D code
-  string visit(ParseTree p) {
+  void visit(ParseTree p) {
     switch (p.name) {
     case "Yi.ClassDeclaration":
       auto c = new ClassDeclaration();
@@ -293,23 +298,24 @@ string compile(ProgramArgs pargs, string yiFn) {
       writeln(c.name, c.superClass, c.fields);
       enforce(c.name !in system.classDeclarations, "duplicate defined class: " ~ c.name);
       system.classDeclarations[c.name] = c;
-      return "c";
+      return;
     default:
       writeln(p.name);
       foreach (i, child; p.children) {
         visit(child);
       }
-      //return p.name;
     }
-    return "";
   }
 
 
-  string dcode = visit(p);  // pass the tree root
+  visit(p);  // pass the tree root
 
   // whole system semantic check for all the class, and generate code
-  system.semanCheck();
+  string dcode = system.semanCheck();
   system.summary();
+
+  string dFn = yiFn[0..$-DOT_YI.length] ~ DOT_D;
+  std.file.write(dFn, dcode);
 
   return dcode;
 }
@@ -321,10 +327,11 @@ void main(string[] args) {
           .add(new commandr.Flag("v", null, "turns on more verbose output")
               .name("verbose")
               .repeating)
-          .add(new Option("c", "RUNCFG", "").validateEachWith(opt => opt.isFile, "must be a valid file"))
+          .add(new Option("c", "YISRC", "").validateEachWith(opt => opt.isFile, "must be a valid file"))
           .parse(args);
 
-  string yiFn = pargs.option("RUNCFG");
+  string yiFn = pargs.option("YISRC");
+  enforce(yiFn.endsWith(DOT_YI));
 
   compile(pargs, yiFn);
 }
