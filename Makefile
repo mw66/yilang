@@ -8,6 +8,7 @@ yc: source/*.d
 
 example:
 	./yc -c test/visitor.yi
+	cd test && dmd visitorApp.d visitor.d && ./visitorApp
 
 clean:
 	$(DUB) clean
