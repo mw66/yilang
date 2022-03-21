@@ -3,13 +3,13 @@ import std.stdio;
 import visitor;
 
 
-void printPerson(Person p) {
+void print(Person p) {
   writeln("my only    name: " ~ p.name);
   writeln("my current addr: " ~ p.addr);
 }
 
-void printVisitor(Visitor p) {
-  printPerson(p);
+void print(Visitor p) {
+  print(cast(Person)p);
   writeln("my UK addr: " ~ p.ukAddr);
   writeln("my US addr: " ~ p.usAddr);
 }
@@ -21,5 +21,8 @@ void main() {
   v.ukAddr = "London";
   v.usAddr = "NewYork";
 
-  printVisitor(v);
+  Person p = v;
+
+  print(p);  // will only print Person (i.e. the variable `p`'s type)
+  print(v);
 }
