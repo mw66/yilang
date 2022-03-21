@@ -1,9 +1,9 @@
 {
 	"fileVersion": 1,
 	"versions": {
-		"boilerplate": "1.5.15",
+		"boilerplate": "1.7.5",
 		"commandr": "0.2.0",
-		"pegged": "0.4.4",
-		"unit-threaded": "1.0.11"
+		"pegged": "0.4.5",
+		"unit-threaded": "2.0.2"
 	}
 }
