@@ -28,14 +28,11 @@ SuperClass < Identifier ClassAdapters?
 ClassAdapters < "(" (ClassAdapter ";")* ")"
 
 ClassAdapter < Rename
-             / Undefine
 	     / Select
 
 Rename < "rename" Identifier "as" Identifier
 
-Undefine < Identifier
-
-Select < Identifier
+Select < "select" Identifier
 
 ClassBody < "{" ClassBodyDeclarations? "}"
 
