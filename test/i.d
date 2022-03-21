@@ -1,5 +1,5 @@
 
 interface I {
-  int i;  // field not allowed in interface
+  int i;  // Error: variable i.I.i field not allowed in interface
 }
 
