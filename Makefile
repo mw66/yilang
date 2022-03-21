@@ -12,6 +12,7 @@ example:
 
 clean:
 	$(DUB) clean
+	$(RM) -fr yc
 
 # if needed to change account:
 # git config --global -e
