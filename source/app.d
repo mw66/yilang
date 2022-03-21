@@ -323,6 +323,11 @@ string compile(ProgramArgs pargs, string yiFn) {
 
 int main(string[] args) {
   auto program = new Program("yc", "0.0.1");
+  if (args.length <= 1) {
+    program.printHelp();
+    return 0;
+  }
+
   auto pargs = program.summary("Yi compiler").author("<admin@yilabs.com>")
           .add(new commandr.Flag("v", null, "turns on more verbose output")
               .name("verbose")
@@ -330,13 +335,11 @@ int main(string[] args) {
           .add(new Option("c", "YISRC", "").validateEachWith(opt => opt.isFile, "must be a valid file"))
           .parse(args);
 
-  if (args.length <= 1) {
-    program.printHelp();
-    return 0;
-  }
-
   string yiFn = pargs.option("YISRC");
-  enforce(yiFn.endsWith(DOT_YI));
+  if (!yiFn.endsWith(DOT_YI)) {
+    writeln("invalid input filename: " ~ yiFn);
+    return -1;
+  }
 
   compile(pargs, yiFn);
 
