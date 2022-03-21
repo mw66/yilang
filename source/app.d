@@ -130,6 +130,7 @@ class ClassDeclaration {
 
      usage:
      -- A a = new A_();
+     -- "A newA() {return new A_();}"  shortcut func provided
    */
   string generateCode() {
     auto sortedFields = this.actualFields.values().sort!("a.name < b.name");
@@ -320,18 +321,24 @@ string compile(ProgramArgs pargs, string yiFn) {
   return dcode;
 }
 
-void main(string[] args) {
-  auto pargs = new Program("yc", "0.0.1")
-          .summary("Yi compiler")
-          .author("<admin@yilabs.com>")
+int main(string[] args) {
+  auto program = new Program("yc", "0.0.1");
+  auto pargs = program.summary("Yi compiler").author("<admin@yilabs.com>")
           .add(new commandr.Flag("v", null, "turns on more verbose output")
               .name("verbose")
               .repeating)
           .add(new Option("c", "YISRC", "").validateEachWith(opt => opt.isFile, "must be a valid file"))
           .parse(args);
 
+  if (args.length <= 1) {
+    program.printHelp();
+    return 0;
+  }
+
   string yiFn = pargs.option("YISRC");
   enforce(yiFn.endsWith(DOT_YI));
 
   compile(pargs, yiFn);
+
+  return 0;
 }
