@@ -6,9 +6,10 @@ DUB=dub
 yc: source/*.d
 	$(DUB) -q build
 
+TEST_DIR = test/rename_field
 example:
-	./yc -c test/visitor.yi
-	cd test && dmd visitorApp.d visitor.d && ./visitorApp
+	./yc -c $(TEST_DIR)/visitor.yi
+	cd $(TEST_DIR) && dmd visitorApp.d visitor.d && ./visitorApp
 
 clean:
 	$(DUB) clean
