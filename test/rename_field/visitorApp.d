@@ -8,10 +8,11 @@ void print(Person p) {
   writeln("my current addr: " ~ p.addr);
 }
 
-void print(Visitor p) {
-  print(cast(Person)p);
-  writeln("my UK addr: " ~ p.ukAddr);
-  writeln("my US addr: " ~ p.usAddr);
+void print(Visitor v) {
+  Person p = v;
+  print(p);
+  writeln("my UK addr: " ~ v.ukAddr);
+  writeln("my US addr: " ~ v.usAddr);
 }
 
 void main() {
